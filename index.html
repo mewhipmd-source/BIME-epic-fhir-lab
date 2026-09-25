@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clinical Informatics Lab — Epic Sandbox Login</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; color: #222; }
+  button { font-size: 16px; padding: 10px 18px; cursor: pointer; }
+  pre { background: #f5f5f5; padding: 14px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+  .error { color: #b00020; }
+  .field { margin-bottom: 8px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  input[type=text] { width: 100%; padding: 6px; box-sizing: border-box; }
+</style>
+</head>
+<body>
+
+<h1>Epic on FHIR Sandbox — Patient Login Demo</h1>
+
+<div id="setup">
+  <p>Enter your app's Non-Production Client ID (from fhir.epic.com → Build Apps → your app). This is saved only in your browser.</p>
+  <div class="field">
+    <label for="clientId">Non-Production Client ID</label>
+    <input type="text" id="clientId" placeholder="e.g. a1b2c3d4-...">
+  </div>
+  <button id="loginBtn">Log in to Epic Sandbox</button>
+</div>
+
+<div id="result" style="margin-top:30px;"></div>
+
+<script>
+// ---- Configuration ----
+const EPIC_AUTHORIZE = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/authorize";
+const EPIC_TOKEN = "https://fhir.epic.com/interconnect-fhir-oauth/oauth2/token";
+const EPIC_FHIR_BASE = "https://fhir.epic.com/interconnect-fhir-oauth/api/FHIR/R4";
+// Adjust scopes to match whatever APIs you selected when registering the app
+const SCOPES = "launch/patient openid fhirUser patient/Patient.read patient/Observation.read patient/Condition.read";
+
+const REDIRECT_URI = window.location.origin + window.location.pathname;
+
+const resultEl = document.getElementById("result");
+const setupEl = document.getElementById("setup");
+
+// ---- PKCE helpers ----
+function base64url(buffer) {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function randomString(len = 64) {
+  const arr = new Uint8Array(len);
+  crypto.getRandomValues(arr);
+  return base64url(arr.buffer).slice(0, len);
+}
+async function sha256(str) {
+  const data = new TextEncoder().encode(str);
+  return await crypto.subtle.digest("SHA-256", data);
+}
+
+// ---- Step 1: kick off login ----
+document.getElementById("loginBtn").addEventListener("click", async () => {
+  const clientId = document.getElementById("clientId").value.trim();
+  if (!clientId) {
+    alert("Enter your Non-Production Client ID first.");
+    return;
+  }
+  sessionStorage.setItem("epic_client_id", clientId);
+
+  const codeVerifier = randomString(64);
+  const codeChallenge = base64url(await sha256(codeVerifier));
+  const state = randomString(16);
+
+  sessionStorage.setItem("epic_code_verifier", codeVerifier);
+  sessionStorage.setItem("epic_state", state);
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: REDIRECT_URI,
+    scope: SCOPES,
+    state: state,
+    aud: EPIC_FHIR_BASE,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256"
+  });
+
+  window.location.href = `${EPIC_AUTHORIZE}?${params.toString()}`;
+});
+
+// ---- Step 2: handle the redirect back from Epic ----
+async function handleRedirect() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const state = params.get("state");
+  const errorParam = params.get("error");
+
+  if (errorParam) {
+    resultEl.innerHTML = `<p class="error">Epic returned an error: ${errorParam} — ${params.get("error_description") || ""}</p>`;
+    return;
+  }
+  if (!code) return; // nothing to do yet, show the login button
+
+  setupEl.style.display = "none";
+  resultEl.innerHTML = "<p>Exchanging authorization code for an access token…</p>";
+
+  const savedState = sessionStorage.getItem("epic_state");
+  if (state !== savedState) {
+    resultEl.innerHTML = `<p class="error">State mismatch — possible session issue. Try logging in again.</p>`;
+    return;
+  }
+
+  const clientId = sessionStorage.getItem("epic_client_id");
+  const codeVerifier = sessionStorage.getItem("epic_code_verifier");
+
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code: code,
+    redirect_uri: REDIRECT_URI,
+    client_id: clientId,
+    code_verifier: codeVerifier
+  });
+
+  try {
+    const tokenResp = await fetch(EPIC_TOKEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+
+    if (!tokenResp.ok) {
+      const text = await tokenResp.text();
+      resultEl.innerHTML = `<p class="error">Token exchange failed (${tokenResp.status}):</p><pre>${text}</pre>`;
+      return;
+    }
+
+    const tokenData = await tokenResp.json();
+    const accessToken = tokenData.access_token;
+    const patientId = tokenData.patient;
+
+    resultEl.innerHTML = `<p>Login succeeded. Patient ID: <code>${patientId || "(none returned)"}</code></p><p>Fetching Patient resource…</p>`;
+
+    if (patientId) {
+      const patResp = await fetch(`${EPIC_FHIR_BASE}/Patient/${patientId}`, {
+        headers: { "Authorization": `Bearer ${accessToken}`, "Accept": "application/fhir+json" }
+      });
+      const patData = await patResp.json();
+      resultEl.innerHTML += `<h3>Patient resource</h3><pre>${JSON.stringify(patData, null, 2)}</pre>`;
+    }
+
+    resultEl.innerHTML += `<h3>Full token response</h3><pre>${JSON.stringify(tokenData, null, 2)}</pre>`;
+
+  } catch (err) {
+    resultEl.innerHTML = `<p class="error">Something went wrong: ${err.message}</p>`;
+  }
+}
+
+handleRedirect();
+</script>
+
+</body>
+</html>
