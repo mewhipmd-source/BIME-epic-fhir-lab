@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Terms and Conditions — Clinical Informatics Lab App</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.5; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; margin-top: 28px; }
+  footer { margin-top: 40px; font-size: 13px; color: #666; }
+</style>
+</head>
+<body>
+
+<h1>Terms and Conditions</h1>
+<p><em>Last updated: <span id="date"></span></em></p>
+
+<p>
+This application ("the App") is provided solely as an educational tool for students
+and instructors participating in a graduate-level course in clinical informatics
+at the University of Washington. It is developed and maintained by course
+instructional staff for classroom and lab use only.
+</p>
+
+<h2>Educational use only</h2>
+<p>
+The App is intended exclusively for instructional purposes, including exploring the
+structure of clinical data, practicing FHIR API interactions, and demonstrating
+health information exchange concepts. It is not intended for, and must not be used
+for, any clinical, diagnostic, treatment, billing, or other real-world healthcare
+operations purpose.
+</p>
+
+<h2>No real patient data</h2>
+<p>
+The App connects only to Epic's publicly available non-production ("sandbox")
+FHIR environment, which contains synthetic test data. No real patient information
+is created, stored, transmitted, or accessed by this App at any time.
+</p>
+
+<h2>No warranty</h2>
+<p>
+The App is provided "as is," for classroom use, without warranty of any kind,
+express or implied. It is maintained on a best-effort basis by course staff and
+may be modified, updated, or discontinued at any time without notice.
+</p>
+
+<h2>Data handling</h2>
+<p>
+Any data retrieved through the App during a class session is sandbox test data
+and is not retained by the App beyond the current browser session. No student
+account credentials, personal information, or real health data are collected
+or stored by the App itself.
+</p>
+
+<h2>Contact</h2>
+<p>
+Questions about this App or its use in coursework should be directed to the
+course instructor.
+</p>
+
+<footer>
+This page exists to satisfy platform requirements for applications registered
+against Epic's Epic on FHIR developer sandbox. It applies only to this
+educational application and its non-production sandbox use.
+</footer>
+
+<script>
+document.getElementById("date").textContent = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+</script>
+
+</body>
+</html>
